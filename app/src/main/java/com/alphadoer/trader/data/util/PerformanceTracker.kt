@@ -13,7 +13,11 @@ object PerformanceTracker {
         val result = block()
         val end = System.nanoTime()
         val duration = (end - start) / 1_000_000
-        Log.d("PerformanceTracker", "$label 耗时 ${duration}ms")
+        try {
+            Log.d("PerformanceTracker", "$label 耗时 ${duration}ms")
+        } catch (t: Throwable) {
+            // 在单元测试环境中 android.util.Log 可能不可用，忽略日志写入错误
+        }
         return TimedResult(result, duration)
     }
 }

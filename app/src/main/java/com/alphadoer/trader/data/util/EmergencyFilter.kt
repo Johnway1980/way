@@ -85,13 +85,63 @@ object EmergencyFilter {
         
         val removedSectorsCount = analysis.affectedSectors.size - filteredSectors.size
         val removedStocksCount = analysis.recommendedStocks.size - filteredStocks.size
-        
+
         if (removedSectorsCount > 0 || removedStocksCount > 0) {
             Log.w(TAG, "AI分析结果过滤统计: 板块=${removedSectorsCount}个, 股票=${removedStocksCount}个")
         }
-        
+
+        // 补偿逻辑：如果过滤后没有任何板块但仍有推荐股票，则尝试从股票的sectorName推导出板块
+        val compensatedSectors = filteredSectors.toMutableList()
+
+        if (compensatedSectors.isEmpty() && filteredStocks.isNotEmpty()) {
+            Log.w(TAG, "过滤后没有板块，尝试从保留的股票中推导板块")
+
+            // 以 sectorName 分组
+            val groupedBySector = filteredStocks.groupBy { it.sectorName?.trim()?.ifEmpty { null } }
+
+            groupedBySector.forEach { (sectorName, stocks) ->
+                val derivedName = sectorName ?: run {
+                    // 如果股票没有 sectorName，尝试从股票名称中匹配科技关键词
+                    val nameMatch = listOf("科技", "电子", "软件", "通信", "芯片", "半导体", "人工智能").firstOrNull { kw ->
+                        stocks.any { it.stockName.contains(kw, ignoreCase = true) }
+                    }
+                    nameMatch ?: "科技"
+                }
+
+                val sectorCode = derivedName.lowercase().replace(" ", "_")
+                val relatedStockCodes = stocks.map { it.stockCode }
+
+                compensatedSectors.add(
+                    AffectedSector(
+                        sectorCode = sectorCode,
+                        sectorName = derivedName,
+                        impactLevel = AffectedSector.ImpactLevel.MEDIUM,
+                        impactDescription = "(derived from recommendedStocks)",
+                        relatedStocks = relatedStockCodes
+                    )
+                )
+            }
+
+            Log.d(TAG, "已从 ${filteredStocks.size} 支股票推导出 ${compensatedSectors.size} 个板块")
+        } else if (compensatedSectors.isNotEmpty() && filteredStocks.isNotEmpty()) {
+            // 将保留的股票关联回现有板块（如果它们的 sectorName 与现有板块匹配）
+            val sectorMap = compensatedSectors.associateBy { it.sectorName.lowercase() }.toMutableMap()
+            filteredStocks.forEach { stock ->
+                val sname = stock.sectorName?.trim()
+                if (!sname.isNullOrBlank()) {
+                    val key = sname.lowercase()
+                    val existing = sectorMap[key]
+                    if (existing != null && !existing.relatedStocks.contains(stock.stockCode)) {
+                        val updated = existing.copy(relatedStocks = existing.relatedStocks + stock.stockCode)
+                        val idx = compensatedSectors.indexOfFirst { it.sectorName.equals(existing.sectorName, ignoreCase = true) }
+                        if (idx >= 0) compensatedSectors[idx] = updated
+                    }
+                }
+            }
+        }
+
         return analysis.copy(
-            affectedSectors = filteredSectors,
+            affectedSectors = compensatedSectors,
             recommendedStocks = filteredStocks
         )
     }

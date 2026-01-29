@@ -11,16 +11,20 @@ import com.alphadoer.trader.domain.usecase.AnalyzeNewsUseCase
 import com.alphadoer.trader.domain.usecase.GetAnalysisHistoryUseCase
 import com.alphadoer.trader.domain.usecase.SaveAnalysisResultUseCase
 import kotlinx.coroutines.flow.Flow
+import com.alphadoer.trader.presentation.morningreading.MorningReadingEvent
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.runTest
 
 class MorningReadingViewModelLinkTest {
 
-    private class FakeAnalyzeNewsUseCase : AnalyzeNewsUseCase({ _, _ -> Result.failure(Exception("not used")) })
-    private class FakeGetAnalysisHistoryUseCase : GetAnalysisHistoryUseCase({ flowOf(emptyList()) })
-    private class FakeSaveAnalysisResultUseCase : SaveAnalysisResultUseCase({ Result.success(Unit) })
+    // Use real use case classes with a fake repository instance when needed
 
     private class FakeNewsAnalysisRepository(private val analysis: NewsAnalysis) : NewsAnalysisRepository {
         override suspend fun analyzeNews(newsContent: String, options: com.alphadoer.trader.domain.model.AnalysisOptions): Result<NewsAnalysis> =
@@ -33,17 +37,24 @@ class MorningReadingViewModelLinkTest {
     }
 
     private class FakeStockRepository : StockRepository {
-        override suspend fun getStockByCode(code: String) = null
+        override suspend fun getStockByCode(code: String): RecommendedStock? = null
+        override suspend fun searchStocks(query: String): List<RecommendedStock> = emptyList()
+        override fun getFavoriteStocks(): Flow<List<RecommendedStock>> = flowOf(emptyList())
+        override suspend fun addToFavorites(stockCode: String): Result<Unit> = Result.success(Unit)
+        override suspend fun removeFromFavorites(stockCode: String): Result<Unit> = Result.success(Unit)
         override suspend fun saveStock(stock: RecommendedStock): Result<Unit> = Result.success(Unit)
-        override suspend fun addToFavorites(code: String): Result<Unit> = Result.success(Unit)
-        override fun getFavorites(): Flow<List<RecommendedStock>> = flowOf(emptyList())
     }
 
     private class FakeTradeJournalRepository : TradeJournalRepository {
-        override suspend fun getJournalByDate(date: String) = null
-        override suspend fun insertJournal(journal: com.alphadoer.trader.domain.model.TradeJournal): Result<Unit> = Result.success(Unit)
-        override suspend fun updateJournal(journal: com.alphadoer.trader.domain.model.TradeJournal): Result<Unit> = Result.success(Unit)
         override fun getAllJournals(): Flow<List<com.alphadoer.trader.domain.model.TradeJournal>> = flowOf(emptyList())
+        override suspend fun getJournalByDate(date: String): com.alphadoer.trader.domain.model.TradeJournal? = null
+        override fun getJournalByDateFlow(date: String): Flow<com.alphadoer.trader.domain.model.TradeJournal?> = flowOf(null)
+        override suspend fun getJournalsByDateRange(startDate: String, endDate: String): List<com.alphadoer.trader.domain.model.TradeJournal> = emptyList()
+        override fun getJournalsByReviewStatus(completed: Boolean): Flow<List<com.alphadoer.trader.domain.model.TradeJournal>> = flowOf(emptyList())
+        override suspend fun insertJournal(journal: com.alphadoer.trader.domain.model.TradeJournal) { /* no-op */ }
+        override suspend fun updateJournal(journal: com.alphadoer.trader.domain.model.TradeJournal) { /* no-op */ }
+        override suspend fun updateReviewStatus(date: String, completed: Boolean) { /* no-op */ }
+        override suspend fun deleteJournal(date: String) { /* no-op */ }
     }
 
     private class CapturingSectorSelectionRepository : SectorSelectionRepository {
@@ -57,7 +68,14 @@ class MorningReadingViewModelLinkTest {
     }
 
     @Test
-    fun linkSectorsFromAnalysis_writesTop3_withAtLeast5StocksEach() {
+    fun linkSectorsFromAnalysis_writesTop3_withAtLeast5StocksEach() = runTest {
+        try {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            org.junit.Assert.fail("Dispatchers.setMain failed: ${'$'}{e.message}")
+        }
+        try {
         val sectors = listOf(
             AffectedSector("industrial_internet", "工业互联网", AffectedSector.ImpactLevel.HIGH, "工业数据相关", emptyList()),
             AffectedSector("ai", "人工智能", AffectedSector.ImpactLevel.MEDIUM, "AI应用落地", emptyList()),
@@ -66,14 +84,68 @@ class MorningReadingViewModelLinkTest {
 
         val recs = listOf(
             // 工业互联网 2只（不足5，需补齐）
-            RecommendedStock("300166", "东方国信", "SZ", RecommendedStock.RecommendationType.WATCH, "工业互联网平台", 0.7, RecommendedStock.RiskLevel.MEDIUM, "工业互联网"),
-            RecommendedStock("002410", "广联达", "SZ", RecommendedStock.RecommendationType.WATCH, "工业软件", 0.7, RecommendedStock.RiskLevel.MEDIUM, "工业互联网"),
+            RecommendedStock(
+                stockCode = "300166",
+                stockName = "东方国信",
+                market = "SZ",
+                recommendation = RecommendedStock.RecommendationType.WATCH,
+                reason = "工业互联网平台",
+                confidence = 0.7,
+                riskLevel = RecommendedStock.RiskLevel.MEDIUM,
+                sectorName = "工业互联网"
+            ),
+            RecommendedStock(
+                stockCode = "002410",
+                stockName = "广联达",
+                market = "SZ",
+                recommendation = RecommendedStock.RecommendationType.WATCH,
+                reason = "工业软件",
+                confidence = 0.7,
+                riskLevel = RecommendedStock.RiskLevel.MEDIUM,
+                sectorName = "工业互联网"
+            ),
             // 人工智能 3只（不足5，需补齐）
-            RecommendedStock("002230", "科大讯飞", "SZ", RecommendedStock.RecommendationType.WATCH, "AI语音", 0.7, RecommendedStock.RiskLevel.MEDIUM, "人工智能"),
-            RecommendedStock("000977", "浪潮信息", "SZ", RecommendedStock.RecommendationType.WATCH, "AI服务器", 0.7, RecommendedStock.RiskLevel.MEDIUM, "人工智能"),
-            RecommendedStock("300496", "中科创达", "SZ", RecommendedStock.RecommendationType.WATCH, "智能操作系统", 0.7, RecommendedStock.RiskLevel.MEDIUM, "人工智能"),
+            RecommendedStock(
+                stockCode = "002230",
+                stockName = "科大讯飞",
+                market = "SZ",
+                recommendation = RecommendedStock.RecommendationType.WATCH,
+                reason = "AI语音",
+                confidence = 0.7,
+                riskLevel = RecommendedStock.RiskLevel.MEDIUM,
+                sectorName = "人工智能"
+            ),
+            RecommendedStock(
+                stockCode = "000977",
+                stockName = "浪潮信息",
+                market = "SZ",
+                recommendation = RecommendedStock.RecommendationType.WATCH,
+                reason = "AI服务器",
+                confidence = 0.7,
+                riskLevel = RecommendedStock.RiskLevel.MEDIUM,
+                sectorName = "人工智能"
+            ),
+            RecommendedStock(
+                stockCode = "300496",
+                stockName = "中科创达",
+                market = "SZ",
+                recommendation = RecommendedStock.RecommendationType.WATCH,
+                reason = "智能操作系统",
+                confidence = 0.7,
+                riskLevel = RecommendedStock.RiskLevel.MEDIUM,
+                sectorName = "人工智能"
+            ),
             // 半导体 1只（不足5，需补齐）
-            RecommendedStock("600584", "长电科技", "SH", RecommendedStock.RecommendationType.WATCH, "封测龙头", 0.7, RecommendedStock.RiskLevel.MEDIUM, "半导体")
+            RecommendedStock(
+                stockCode = "600584",
+                stockName = "长电科技",
+                market = "SH",
+                recommendation = RecommendedStock.RecommendationType.WATCH,
+                reason = "封测龙头",
+                confidence = 0.7,
+                riskLevel = RecommendedStock.RiskLevel.MEDIUM,
+                sectorName = "半导体"
+            )
         )
 
         val analysis = NewsAnalysis(
@@ -87,24 +159,39 @@ class MorningReadingViewModelLinkTest {
             recommendedStocks = recs,
             riskWarnings = emptyList(),
             recommendations = emptyList(),
-            analysisType = com.alphadoer.trader.domain.model.AnalysisOptions.AnalysisType.NEWS,
+            analysisType = com.alphadoer.trader.domain.model.NewsAnalysis.AnalysisType.QUICK,
             createdAt = System.currentTimeMillis(),
             metadata = emptyMap()
         )
 
         val sectorRepo = CapturingSectorSelectionRepository()
+        val fakeRepo = FakeNewsAnalysisRepository(analysis)
         val vm = MorningReadingViewModel(
-            analyzeNewsUseCase = FakeAnalyzeNewsUseCase(),
-            getAnalysisHistoryUseCase = FakeGetAnalysisHistoryUseCase(),
-            saveAnalysisResultUseCase = FakeSaveAnalysisResultUseCase(),
-            newsAnalysisRepository = FakeNewsAnalysisRepository(analysis),
+            analyzeNewsUseCase = com.alphadoer.trader.domain.usecase.AnalyzeNewsUseCase(fakeRepo),
+            getAnalysisHistoryUseCase = com.alphadoer.trader.domain.usecase.GetAnalysisHistoryUseCase(fakeRepo),
+            saveAnalysisResultUseCase = com.alphadoer.trader.domain.usecase.SaveAnalysisResultUseCase(fakeRepo),
+            newsAnalysisRepository = fakeRepo,
             stockRepository = FakeStockRepository(),
             tradeJournalRepository = FakeTradeJournalRepository(),
             sectorSelectionRepository = sectorRepo
         )
 
         // 触发事件：从分析写入板块记录
-        vm.handleEvent(MorningReadingEvent.LinkSectorsFromAnalysis(analysis.id))
+        try {
+            vm.handleEvent(MorningReadingEvent.LinkSectorsFromAnalysis(analysis.id))
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            org.junit.Assert.fail("vm.handleEvent failed: ${'$'}{e.message}")
+        }
+
+        // 等待协程执行完成
+        testScheduler.advanceUntilIdle()
+
+        // 如果未写入预期数量，抛出带上下文的异常以便诊断
+        if (sectorRepo.saved.size < 3) {
+            val state = vm.uiState.value
+            org.junit.Assert.fail("板块写入不足: saved=${'$'}{sectorRepo.saved.size}, savedList=${'$'}{sectorRepo.saved}, uiError=${'$'}{state.errorMessage}, currentAnalysis=${'$'}{state.currentAnalysis}")
+        }
 
         // 校验：应写入TOP3三个板块
         assertEquals(3, sectorRepo.saved.size)
@@ -117,5 +204,8 @@ class MorningReadingViewModelLinkTest {
         assertTrue(names.contains("工业互联网"))
         assertTrue(names.contains("人工智能"))
         assertTrue(names.contains("半导体"))
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 }

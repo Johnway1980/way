@@ -325,6 +325,15 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
         }
     }
     
+    // Testing helper: expose parsing for unit tests (package-visible)
+    internal fun parseQianfanResponseForTest(
+        jsonString: String,
+        newsContent: String,
+        options: com.alphadoer.trader.domain.model.AnalysisOptions
+    ): com.alphadoer.trader.domain.model.NewsAnalysis {
+        return parseQianfanResponse(jsonString, newsContent, options)
+    }
+    
     override fun getAnalysisHistory(): Flow<List<NewsAnalysis>> = flow {
         try {
             val cached = try {

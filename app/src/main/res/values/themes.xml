@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 外层仍然只是一个壳，真正的配色在 Compose 的 AlphaDoerTheme 中控制 -->
+    <style name="Theme.AlphaDoer" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor" tools:targetApi="l">@android:color/transparent</item>
+        <item name="android:navigationBarColor" tools:targetApi="l">@android:color/transparent</item>
+    </style>
+</resources>

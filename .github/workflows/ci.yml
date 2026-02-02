@@ -29,8 +29,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Run unit tests
+      - name: Install Gradle and generate wrapper
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y gradle
-          gradle :app:test --no-daemon --stacktrace
+          sudo apt-get install -y gradle unzip
+          gradle wrapper --gradle-version 8.4
+
+      - name: Run unit tests with wrapper
+        run: |
+          chmod +x ./gradlew || true
+          ./gradlew :app:test --no-daemon --stacktrace

@@ -1,9 +1,0 @@
-From acb595be6b963b8c690eed83f4875815252450c3 Mon Sep 17 00:00:00 2001
-From: AlphaDoer Bot <dev@local>
-Date: Thu, 29 Jan 2026 17:11:27 +0800
-Subject: [PATCH] Fix: robust parseQianfanResponse + EmergencyFilter
- compensation
-
--- 
-2.45.1.windows.1
-

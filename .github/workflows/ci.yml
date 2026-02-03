@@ -30,6 +30,14 @@ jobs:
               echo "Commenting org.gradle.java.home in gradle.properties for CI runner"
               sed -i.bak 's/^org.gradle.java.home=.*$/#&/' gradle.properties || true
             fi
+            # Remove Windows-specific temp dir JVM args that point to C:\ paths
+            if grep -q "-Dorg.sqlite.tmpdir" gradle.properties || grep -q "-Djava.io.tmpdir" gradle.properties; then
+              echo "Removing Windows tempdir JVM args from org.gradle.jvmargs"
+              sed -i.bak "s#-Dorg.sqlite.tmpdir=[^ ]*##g" gradle.properties || true
+              sed -i.bak "s#-Djava.io.tmpdir=[^ ]*##g" gradle.properties || true
+              # clean up multiple spaces
+              sed -i.bak "s/  */ /g" gradle.properties || true
+            fi
           fi
 
       - name: Cache Gradle

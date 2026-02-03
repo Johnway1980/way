@@ -24,15 +24,17 @@ jobs:
 
       - name: Prepare gradle.properties for runner
         run: |
-          # On CI runners (Linux) a Windows-local org.gradle.java.home entry can break Gradle.
-          if [ -f gradle.properties ]; then
-            if grep -q "^org.gradle.java.home" gradle.properties; then
-              echo "Commenting org.gradle.java.home in gradle.properties for CI runner"
-              sed -i.bak 's/^org.gradle.java.home=.*$/#&/' gradle.properties || true
-            fi
-            # Remove Windows-specific temp dir JVM args that point to C:\ paths
-            if grep -q "-Dorg.sqlite.tmpdir" gradle.properties || grep -q "-Djava.io.tmpdir" gradle.properties; then
-              echo "Removing Windows tempdir JVM args from org.gradle.jvmargs"
+          # Use a CI-specific gradle.properties (do not overwrite local developer settings)
+          if [ -f .github/gradle/gradle.properties.ci ]; then
+            echo "Copying CI gradle.properties to project root"
+            cp .github/gradle/gradle.properties.ci gradle.properties
+          else
+            # Fallback: try to sanitize existing gradle.properties
+            if [ -f gradle.properties ]; then
+              if grep -q "^org.gradle.java.home" gradle.properties; then
+                echo "Commenting org.gradle.java.home in gradle.properties for CI runner"
+                sed -i.bak 's/^org.gradle.java.home=.*$/#&/' gradle.properties || true
+              fi
               # Replace the entire org.gradle.jvmargs with a CI-safe default
               sed -i.bak "s#^org.gradle.jvmargs=.*#org.gradle.jvmargs=-Xmx2048m -Xms512m -Dfile.encoding=UTF-8#" gradle.properties || true
             fi

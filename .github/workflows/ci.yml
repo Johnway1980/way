@@ -33,10 +33,8 @@ jobs:
             # Remove Windows-specific temp dir JVM args that point to C:\ paths
             if grep -q "-Dorg.sqlite.tmpdir" gradle.properties || grep -q "-Djava.io.tmpdir" gradle.properties; then
               echo "Removing Windows tempdir JVM args from org.gradle.jvmargs"
-              sed -i.bak "s#-Dorg.sqlite.tmpdir=[^ ]*##g" gradle.properties || true
-              sed -i.bak "s#-Djava.io.tmpdir=[^ ]*##g" gradle.properties || true
-              # clean up multiple spaces
-              sed -i.bak "s/  */ /g" gradle.properties || true
+              # Replace the entire org.gradle.jvmargs with a CI-safe default
+              sed -i.bak "s#^org.gradle.jvmargs=.*#org.gradle.jvmargs=-Xmx2048m -Xms512m -Dfile.encoding=UTF-8#" gradle.properties || true
             fi
           fi
 

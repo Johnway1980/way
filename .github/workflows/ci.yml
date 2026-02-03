@@ -52,15 +52,32 @@ jobs:
 
       - name: Ensure Gradle wrapper and run tests
         run: |
-          set -e
-          # If wrapper exists, use it; otherwise install gradle, generate wrapper, then use it.
+          set -euo pipefail
+          # Diagnostics: print which gradle and wrapper version to ensure we use the project wrapper
+          echo "---- Diagnostics: gradle locations ----"
+          which gradle || true
+          echo "-- wrapper executable exists?"; [ -f ./gradlew ] && echo yes || echo no
+          echo "---- Wrapper version (if present) ----"
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew || true
+            ./gradlew --version || true
+          fi
+
+          # Clear common Java option env vars that may inject unwanted JVM properties
+          unset JAVA_TOOL_OPTIONS || true
+          unset _JAVA_OPTIONS || true
+
+          # Print effective Java properties for troubleshooting
+          echo "---- Java properties (java -XshowSettings:properties -version) ----"
+          java -XshowSettings:properties -version 2>&1 | sed -n '1,120p' || true
+
+          # Ensure temporary dir properties are CI-safe and run tests via wrapper explicitly
           if [ -x ./gradlew ]; then
-            # Ensure temporary dir properties are CI-safe
-            ./gradlew -Djava.io.tmpdir=/tmp -Dorg.sqlite.tmpdir=/tmp :app:test --no-daemon --stacktrace || ./gradlew -Djava.io.tmpdir=/tmp -Dorg.sqlite.tmpdir=/tmp test --no-daemon --stacktrace
+            ./gradlew -Djava.io.tmpdir=/tmp -Dorg.sqlite.tmpdir=/tmp :app:test --no-daemon --stacktrace
           else
             sudo apt-get update -y
             sudo apt-get install -y gradle unzip
             gradle wrapper --gradle-version 8.4
             chmod +x ./gradlew
-            ./gradlew -Djava.io.tmpdir=/tmp -Dorg.sqlite.tmpdir=/tmp :app:test --no-daemon --stacktrace || ./gradlew -Djava.io.tmpdir=/tmp -Dorg.sqlite.tmpdir=/tmp test --no-daemon --stacktrace
+            ./gradlew -Djava.io.tmpdir=/tmp -Dorg.sqlite.tmpdir=/tmp :app:test --no-daemon --stacktrace
           fi

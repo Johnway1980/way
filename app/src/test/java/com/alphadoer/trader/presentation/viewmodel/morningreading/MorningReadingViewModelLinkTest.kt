@@ -68,7 +68,7 @@ class MorningReadingViewModelLinkTest {
     }
 
     @Test
-    fun linkSectorsFromAnalysis_writesTop3_withAtLeast5StocksEach() = runTest {
+    fun linkSectorsFromAnalysis_writesTop3_withAtLeast3StocksEach() = runTest {
         try {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         } catch (e: Throwable) {
@@ -196,8 +196,8 @@ class MorningReadingViewModelLinkTest {
         // 校验：应写入TOP3三个板块
         assertEquals(3, sectorRepo.saved.size)
 
-        // 每个板块至少5只股票
-        assertTrue(sectorRepo.saved.all { it.stockCodes.size >= 5 })
+        // 每个板块至少3只股票
+        assertTrue(sectorRepo.saved.all { it.stockCodes.size >= 3 })
 
         // 板块名称匹配
         val names = sectorRepo.saved.map { it.sectorName }.toSet()

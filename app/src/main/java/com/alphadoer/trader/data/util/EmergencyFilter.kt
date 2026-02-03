@@ -31,6 +31,9 @@ object EmergencyFilter {
     
     // AI相关科技板块
     private val techSectors = listOf("计算机", "电子", "通信", "软件", "半导体", "芯片", "人工智能", "科技")
+    // 航天/卫星相关关键词和板块
+    private val spaceKeywords = listOf("星舰", "星链", "卫星", "发射", "航天", "太空", "星座", "IRIS2", "Starship", "Starlink")
+    private val spaceSectors = listOf("航天科技", "卫星制造与发射", "卫星通信", "空间通信", "航天电子")
     
     /**
      * 过滤AI分析结果
@@ -41,45 +44,53 @@ object EmergencyFilter {
         analysis: NewsAnalysis
     ): NewsAnalysis {
         val containsAIKeywords = aiKeywords.any { newsContent.contains(it, ignoreCase = true) }
-        
-        if (!containsAIKeywords) {
-            // 非AI新闻，不进行过滤
+        val containsSpaceKeywords = spaceKeywords.any { newsContent.contains(it, ignoreCase = true) }
+
+        // 如果既不是AI新闻也不是航天/卫星新闻，则不进行过滤
+        if (!containsAIKeywords && !containsSpaceKeywords) {
             return analysis
         }
         
         Log.d(TAG, "检测到AI相关新闻，开始过滤无关推荐")
         
-        // 过滤板块
-        val filteredSectors = analysis.affectedSectors.filter { sector ->
-            val isRelated = techSectors.any { techSector ->
-                sector.sectorName.contains(techSector, ignoreCase = true)
-            }
-            val isUnrelated = unrelatedSectors.any { unrelatedSector ->
-                sector.sectorName.contains(unrelatedSector, ignoreCase = true)
-            }
-            
-            if (isUnrelated) {
-                Log.w(TAG, "过滤无关板块: ${sector.sectorName}")
-                false
-            } else {
-                isRelated || !isUnrelated
+        // 构建允许的板块集合：AI -> techSectors, 航天 -> spaceSectors
+        val allowedSectors = mutableListOf<String>()
+        if (containsAIKeywords) allowedSectors += techSectors
+        if (containsSpaceKeywords) allowedSectors += spaceSectors
+
+        // 过滤板块：保留与 allowedSectors 匹配且不在 unrelatedSectors 列表中的项
+        val filteredSectors = if (allowedSectors.isEmpty()) {
+            analysis.affectedSectors
+        } else {
+            analysis.affectedSectors.filter { sector ->
+                val isUnrelated = unrelatedSectors.any { unrelatedSector ->
+                    sector.sectorName.contains(unrelatedSector, ignoreCase = true)
+                }
+                if (isUnrelated) {
+                    Log.w(TAG, "过滤无关板块: ${sector.sectorName}")
+                    false
+                } else {
+                    allowedSectors.any { allowed -> sector.sectorName.contains(allowed, ignoreCase = true) }
+                }
             }
         }
         
         // 过滤股票
         val filteredStocks = analysis.recommendedStocks.filter { stock ->
             val isUnrelated = unrelatedStocks.contains(stock.stockCode)
-            
+
             if (isUnrelated) {
                 Log.w(TAG, "过滤无关股票: ${stock.stockCode} ${stock.stockName}")
                 false
             } else {
-                // 检查是否属于科技板块
+                // 检查是否属于相关板块（AI 或 航天）
                 val isTechStock = isTechRelatedStock(stock)
-                if (!isTechStock) {
-                    Log.w(TAG, "过滤非科技股: ${stock.stockCode} ${stock.stockName}")
+                val isSpaceStock = (!stock.sectorName.isNullOrBlank() && spaceSectors.any { s -> stock.sectorName.contains(s, ignoreCase = true) })
+                        || spaceKeywords.any { kw -> stock.stockName.contains(kw, ignoreCase = true) }
+                if (!isTechStock && !isSpaceStock) {
+                    Log.w(TAG, "过滤非相关股: ${stock.stockCode} ${stock.stockName}")
                 }
-                isTechStock
+                isTechStock || isSpaceStock
             }
         }
         
@@ -101,11 +112,17 @@ object EmergencyFilter {
 
             groupedBySector.forEach { (sectorName, stocks) ->
                 val derivedName = sectorName ?: run {
-                    // 如果股票没有 sectorName，尝试从股票名称中匹配科技关键词
-                    val nameMatch = listOf("科技", "电子", "软件", "通信", "芯片", "半导体", "人工智能").firstOrNull { kw ->
+                    // 如果股票没有 sectorName，尝试从股票名称中匹配航天/科技关键词
+                    val nameMatch = listOf("航天", "卫星", "星链", "星舰", "发射").firstOrNull { kw ->
                         stocks.any { it.stockName.contains(kw, ignoreCase = true) }
                     }
-                    nameMatch ?: "科技"
+                    if (nameMatch != null) nameMatch else if (containsSpaceKeywords) {
+                        "航天科技"
+                    } else {
+                        listOf("科技", "电子", "通信", "半导体").firstOrNull { kw ->
+                            stocks.any { it.stockName.contains(kw, ignoreCase = true) }
+                        } ?: "科技"
+                    }
                 }
 
                 val sectorCode = derivedName.lowercase().replace(" ", "_")
@@ -138,6 +155,64 @@ object EmergencyFilter {
                     }
                 }
             }
+
+            // 确保每个板块至少有 3 支相关股票（尽量从 filteredStocks 中补齐）
+            val minPerSector = 3
+            // map stockCode -> RecommendedStock for quick lookup
+            val stockByCode = filteredStocks.associateBy { it.stockCode }
+            // 可用候选列表（去重）
+            val availableCodes = filteredStocks.map { it.stockCode }.toMutableList()
+
+            for (i in compensatedSectors.indices) {
+                val sector = compensatedSectors[i]
+                val current = sector.relatedStocks.toMutableList()
+
+                // 1) 优先：同名 sector 的股票
+                val sameSectorCodes = filteredStocks.filter {
+                    !it.sectorName.isNullOrBlank() && it.sectorName.equals(sector.sectorName, ignoreCase = true)
+                }.map { it.stockCode }
+                for (code in sameSectorCodes) {
+                    if (current.size >= minPerSector) break
+                    if (!current.contains(code)) current.add(code)
+                }
+
+                // 2) 次优：名称中包含科技关键词的股票
+                    // 2) 次优：优先使用航天相关候选（如果存在）
+                    if (current.size < minPerSector) {
+                        val spaceCandidates = filteredStocks.filter { rs ->
+                            (!rs.sectorName.isNullOrBlank() && spaceSectors.any { s -> rs.sectorName.contains(s, ignoreCase = true) })
+                                    || spaceKeywords.any { kw -> rs.stockName.contains(kw, ignoreCase = true) }
+                        }.map { it.stockCode }
+                        for (code in spaceCandidates) {
+                            if (current.size >= minPerSector) break
+                            if (!current.contains(code)) current.add(code)
+                        }
+                    }
+
+                    // 3) 次优2：名称中包含科技关键词的股票
+                    if (current.size < minPerSector) {
+                        val techCandidates = filteredStocks.filter { rs ->
+                            val keywords = listOf("科技", "电子", "软件", "通信", "芯片", "半导体", "人工智能")
+                            keywords.any { kw -> rs.stockName.contains(kw, ignoreCase = true) }
+                        }.map { it.stockCode }
+                        for (code in techCandidates) {
+                            if (current.size >= minPerSector) break
+                            if (!current.contains(code)) current.add(code)
+                        }
+                    }
+
+                // 3) 兜底：从所有可用股票中补齐
+                if (current.size < minPerSector) {
+                    for (code in availableCodes) {
+                        if (current.size >= minPerSector) break
+                        if (!current.contains(code)) current.add(code)
+                    }
+                }
+
+                // 截断或更新
+                val finalRelated = if (current.size > minPerSector) current.take(minPerSector) else current
+                compensatedSectors[i] = sector.copy(relatedStocks = finalRelated)
+            }
         }
 
         return analysis.copy(
@@ -159,7 +234,7 @@ object EmergencyFilter {
         
         // 如果股票名称包含科技关键词，认为相关
         val stockNameKeywords = listOf("科技", "电子", "软件", "通信", "芯片", "半导体", "人工智能")
-        val nameContainsTech = stockNameKeywords.any { stock.stockName.contains(it) }
+        val nameContainsTech = stockNameKeywords.any { stock.stockName.contains(it, ignoreCase = true) }
         
         return techStockCodes.contains(stock.stockCode) || nameContainsTech
     }

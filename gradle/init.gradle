@@ -1,0 +1,20 @@
+// Gradle init script to disable Room verifier on Windows
+// 在Gradle启动的最早阶段设置系统属性
+
+// 在settings阶段之前设置
+settingsEvaluated {
+    System.setProperty("room.disableVerification", "true")
+    System.setProperty("ROOM_DISABLE_VERIFICATION", "true")
+}
+
+// 在项目加载前设置
+projectsLoaded {
+    System.setProperty("room.disableVerification", "true")
+    System.setProperty("ROOM_DISABLE_VERIFICATION", "true")
+}
+
+// 在项目评估前设置
+beforeProject {
+    System.setProperty("room.disableVerification", "true")
+    System.setProperty("ROOM_DISABLE_VERIFICATION", "true")
+}

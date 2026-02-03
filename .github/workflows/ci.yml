@@ -32,13 +32,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Install Gradle and generate wrapper
+      - name: Ensure Gradle wrapper and run tests
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y gradle unzip
-          gradle wrapper --gradle-version 8.4
-
-      - name: Run unit tests with wrapper
-        run: |
-          chmod +x ./gradlew || true
-          ./gradlew :app:test --no-daemon --stacktrace
+          set -e
+          # If wrapper exists, use it; otherwise install gradle, generate wrapper, then use it.
+          if [ -x ./gradlew ]; then
+            ./gradlew :app:test --no-daemon --stacktrace || ./gradlew test --no-daemon --stacktrace
+          else
+            sudo apt-get update -y
+            sudo apt-get install -y gradle unzip
+            gradle wrapper --gradle-version 8.4
+            chmod +x ./gradlew
+            ./gradlew :app:test --no-daemon --stacktrace || ./gradlew test --no-daemon --stacktrace
+          fi

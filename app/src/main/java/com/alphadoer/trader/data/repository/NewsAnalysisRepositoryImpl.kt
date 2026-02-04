@@ -501,6 +501,17 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             return r
         }
 
+        // 规范化文本，去除不可见字符、BOM，合并空白，返回 null 表示无效/空
+        fun normalizeText(input: Any?): String? {
+            if (input == null) return null
+            var s = input.toString().trim()
+            if (s.isEmpty()) return null
+            if (s.startsWith("\uFEFF")) s = s.substring(1)
+            s = s.replace(Regex("[\u0000-\u001F&&[^\n\r\t]]+"), " ")
+            s = s.replace(Regex("\\s+"), " ").trim()
+            return if (s.isNotEmpty()) s else null
+        }
+
         try {
             var cleaned = unwrapPossibleStringWrappedJson(jsonString)
             cleaned = cleaned.trim()
@@ -572,10 +583,10 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                 )
             }
 
-            val summary = (json["summary"] as? String)
+            val summary = normalizeText((json["summary"] as? String)
                 ?: (json["summaryText"] as? String)
                 ?: (json["abstract"] as? String)
-                ?: cleaned.take(200)
+                ?: cleaned.take(200)) ?: cleaned.take(200)
 
             val sentimentStr = (json["sentiment"] as? String) ?: "NEUTRAL"
             val confidence = ((json["confidence"] as? Number)?.toDouble() ?: 0.5).coerceIn(0.0, 1.0)
@@ -599,16 +610,18 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                 rawSectors.forEach { item ->
                     @Suppress("UNCHECKED_CAST")
                     val sectorObj = item as? Map<String, Any?> ?: return@forEach
-                    val sectorName = (sectorObj["sectorName"] as? String)
-                        ?: (sectorObj["name"] as? String) ?: ""
-                    val impactLevelStr = (sectorObj["impactLevel"] as? String) ?: "MEDIUM"
+                    val sectorName = normalizeText((sectorObj["sectorName"] as? String)
+                        ?: (sectorObj["name"] as? String)
+                        ?: (sectorObj["sector"] as? String)
+                        ?: "")
+                    val impactLevelStr = normalizeText(sectorObj["impactLevel"] as? String) ?: "MEDIUM"
                     val impactLevel = when (impactLevelStr.uppercase()) {
                         "HIGH" -> AffectedSector.ImpactLevel.HIGH
                         "LOW" -> AffectedSector.ImpactLevel.LOW
                         else -> AffectedSector.ImpactLevel.MEDIUM
                     }
-                    val impactDescription = (sectorObj["impactDescription"] as? String) ?: ""
-                    if (sectorName.isNotBlank()) {
+                    val impactDescription = normalizeText(sectorObj["impactDescription"] as? String) ?: ""
+                    if (!sectorName.isNullOrBlank()) {
                         affectedSectors.add(
                             AffectedSector(
                                 sectorCode = sectorName.lowercase().replace(" ", "_"),
@@ -629,14 +642,21 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                 rawStocks.forEach { item ->
                     @Suppress("UNCHECKED_CAST")
                     val stockObj = item as? Map<String, Any?> ?: return@forEach
-                    val stockCode = (stockObj["stockCode"] as? String) ?: (stockObj["code"] as? String) ?: ""
-                    val stockName = (stockObj["stockName"] as? String) ?: (stockObj["name"] as? String) ?: ""
-                    val market = (stockObj["market"] as? String) ?: "SH"
-                    val sectorName = (stockObj["sectorName"] as? String)?.takeIf { it.isNotBlank() }
-                    val reason = (stockObj["reason"] as? String) ?: ""
-                    val recommendationStr = (stockObj["recommendation"] as? String) ?: "WATCH"
+                    val stockCode = normalizeText((stockObj["stockCode"] as? String) ?: (stockObj["code"] as? String)) ?: ""
+                    val stockName = normalizeText((stockObj["stockName"] as? String) ?: (stockObj["name"] as? String) ?: (stockObj["title"] as? String)) ?: ""
+                    val market = normalizeText(stockObj["market"] as? String) ?: "SH"
+                    var sectorName = normalizeText((stockObj["sectorName"] as? String) ?: (stockObj["sector"] as? String))
+                    val reason = normalizeText(stockObj["reason"] as? String) ?: ""
+                    val recommendationStr = normalizeText(stockObj["recommendation"] as? String) ?: "WATCH"
                     val stockConfidence = ((stockObj["confidence"] as? Number)?.toDouble() ?: 0.7).coerceIn(0.0, 1.0)
                     val targetPrice = (stockObj["targetPrice"] as? Number)?.toDouble()?.takeIf { it > 0 }
+
+                    // 如果没有 sectorName，尝试用 affectedSectors 中的名称做简单匹配
+                    if (sectorName.isNullOrBlank() && stockName.isNotBlank() && affectedSectors.isNotEmpty()) {
+                        val hint = stockName.substring(0, minOf(4, stockName.length))
+                        val match = affectedSectors.firstOrNull { sec -> sec.sectorName?.contains(hint, ignoreCase = true) == true }
+                        if (match != null) sectorName = match.sectorName
+                    }
 
                     val recommendation = when (recommendationStr.uppercase()) {
                         "BUY" -> RecommendedStock.RecommendationType.BUY
@@ -673,20 +693,25 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                         if (!arr.isNullOrEmpty()) {
                             @Suppress("UNCHECKED_CAST")
                             (arr as List<Map<String, Any?>>).forEach { sectorObj ->
-                                val sectorName = (sectorObj["sectorName"] as? String) ?: (sectorObj["name"] as? String) ?: ""
-                                if (sectorName.isNotBlank()) {
+                                val sectorName = normalizeText((sectorObj["sectorName"] as? String)
+                                    ?: (sectorObj["name"] as? String)
+                                    ?: (sectorObj["sector"] as? String)
+                                    ?: "")
+                                val impactDescription = normalizeText(sectorObj["impactDescription"] as? String) ?: ""
+                                if (!sectorName.isNullOrBlank()) {
                                     affectedSectors.add(
                                         AffectedSector(
                                             sectorCode = sectorName.lowercase().replace(" ", "_"),
                                             sectorName = sectorName,
                                             impactLevel = AffectedSector.ImpactLevel.MEDIUM,
-                                            impactDescription = (sectorObj["impactDescription"] as? String) ?: "",
+                                            impactDescription = impactDescription,
                                             relatedStocks = emptyList()
                                         )
                                     )
                                 }
                             }
                             metadata["affectedSectors_status"] = "RECOVERED_FROM_FRAGMENT"
+                            metadata["affectedSectors_raw_fragment"] = frag
                         }
                     }
                 } catch (e: Exception) {
@@ -707,25 +732,38 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                         if (!arr.isNullOrEmpty()) {
                             @Suppress("UNCHECKED_CAST")
                             (arr as List<Map<String, Any?>>).forEach { stockObj ->
-                                val stockCode = (stockObj["stockCode"] as? String) ?: (stockObj["code"] as? String) ?: ""
-                                val stockName = (stockObj["stockName"] as? String) ?: (stockObj["name"] as? String) ?: ""
+                                val stockCode = normalizeText((stockObj["stockCode"] as? String) ?: (stockObj["code"] as? String)) ?: ""
+                                val stockName = normalizeText((stockObj["stockName"] as? String) ?: (stockObj["name"] as? String) ?: (stockObj["title"] as? String)) ?: ""
+                                val market = normalizeText(stockObj["market"] as? String) ?: "SH"
+                                var sectorName = normalizeText((stockObj["sectorName"] as? String) ?: (stockObj["sector"] as? String))
+                                val reason = normalizeText(stockObj["reason"] as? String) ?: ""
+                                val confidence = ((stockObj["confidence"] as? Number)?.toDouble() ?: 0.7).coerceIn(0.0, 1.0)
+                                val targetPrice = (stockObj["targetPrice"] as? Number)?.toDouble()?.takeIf { it > 0 }
+
+                                if (sectorName.isNullOrBlank() && stockName.isNotBlank() && affectedSectors.isNotEmpty()) {
+                                    val hint = stockName.substring(0, minOf(4, stockName.length))
+                                    val match = affectedSectors.firstOrNull { sec -> sec.sectorName?.contains(hint, ignoreCase = true) == true }
+                                    if (match != null) sectorName = match.sectorName
+                                }
+
                                 if (stockCode.isNotBlank() || stockName.isNotBlank()) {
                                     recommendedStocks.add(
                                         RecommendedStock(
                                             stockCode = stockCode,
                                             stockName = stockName,
-                                            market = (stockObj["market"] as? String) ?: "SH",
+                                            market = market,
                                             recommendation = RecommendedStock.RecommendationType.WATCH,
-                                            reason = (stockObj["reason"] as? String) ?: "",
-                                            confidence = ((stockObj["confidence"] as? Number)?.toDouble() ?: 0.7).coerceIn(0.0, 1.0),
-                                            targetPrice = (stockObj["targetPrice"] as? Number)?.toDouble()?.takeIf { it > 0 },
+                                            reason = reason,
+                                            confidence = confidence,
+                                            targetPrice = targetPrice,
                                             riskLevel = RecommendedStock.RiskLevel.MEDIUM,
-                                            sectorName = (stockObj["sectorName"] as? String)
+                                            sectorName = sectorName
                                         )
                                     )
                                 }
                             }
                             metadata["recommendedStocks_status"] = "RECOVERED_FROM_FRAGMENT"
+                            metadata["recommendedStocks_raw_fragment"] = frag
                         }
                     }
                 } catch (e: Exception) {

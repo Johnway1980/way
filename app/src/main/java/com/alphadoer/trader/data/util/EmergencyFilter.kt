@@ -1,6 +1,7 @@
 package com.alphadoer.trader.data.util
 
 import android.util.Log
+import java.util.Locale
 import com.alphadoer.trader.data.remote.dto.AIAnalysisResponse
 import com.alphadoer.trader.domain.model.AffectedSector
 import com.alphadoer.trader.domain.model.NewsAnalysis
@@ -39,6 +40,10 @@ object EmergencyFilter {
      * 过滤AI分析结果
      * 如果新闻包含AI关键词，强制过滤非科技股和无关板块
      */
+    // 可在运行时关闭严格过滤以便调试/归档（非破坏性开关，默认启用）
+    @Volatile
+    var strictFiltering: Boolean = true
+
     fun filterAnalysisResult(
         newsContent: String,
         analysis: NewsAnalysis
@@ -59,46 +64,102 @@ object EmergencyFilter {
         if (containsSpaceKeywords) allowedSectors += spaceSectors
 
         // 过滤板块：保留与 allowedSectors 匹配且不在 unrelatedSectors 列表中的项
-        val filteredSectors = if (allowedSectors.isEmpty()) {
+        val filteredSectors = if (!strictFiltering || allowedSectors.isEmpty()) {
+            // 非严格模式或没有限定板块 -> 不进行板块级过滤
             analysis.affectedSectors
         } else {
             analysis.affectedSectors.filter { sector ->
                 val isUnrelated = unrelatedSectors.any { unrelatedSector ->
-                    sector.sectorName.contains(unrelatedSector, ignoreCase = true)
+                    sector.sectorName?.contains(unrelatedSector, ignoreCase = true) == true
                 }
                 if (isUnrelated) {
                     Log.w(TAG, "过滤无关板块: ${sector.sectorName}")
                     false
                 } else {
-                    allowedSectors.any { allowed -> sector.sectorName.contains(allowed, ignoreCase = true) }
+                    allowedSectors.any { allowed -> sector.sectorName?.contains(allowed, ignoreCase = true) == true }
                 }
             }
         }
         
         // 过滤股票
-        val filteredStocks = analysis.recommendedStocks.filter { stock ->
-            val isUnrelated = unrelatedStocks.contains(stock.stockCode)
+        val stockDiagnostics = mutableListOf<Pair<RecommendedStock, String>>()
+        val filteredStocks = if (!strictFiltering) {
+            // 非严格模式：保留所有推荐（仅用于诊断/回归验证）
+            analysis.recommendedStocks
+        } else {
+            analysis.recommendedStocks.filter { stock ->
+                val isUnrelated = unrelatedStocks.contains(stock.stockCode)
 
-            if (isUnrelated) {
-                Log.w(TAG, "过滤无关股票: ${stock.stockCode} ${stock.stockName}")
-                false
-            } else {
-                // 检查是否属于相关板块（AI 或 航天）
-                val isTechStock = isTechRelatedStock(stock)
-                val isSpaceStock = (!stock.sectorName.isNullOrBlank() && spaceSectors.any { s -> stock.sectorName.contains(s, ignoreCase = true) })
+                if (isUnrelated) {
+                    val reason = "blacklisted"
+                    stockDiagnostics.add(stock to reason)
+                    Log.w(TAG, "过滤无关股票: ${stock.stockCode} ${stock.stockName} -> $reason")
+                    false
+                } else {
+                    // 检查是否属于相关板块（AI 或 航天）
+                    val isTechStock = isTechRelatedStock(stock)
+                    val isSpaceStock = (!stock.sectorName.isNullOrBlank() && spaceSectors.any { s -> stock.sectorName?.contains(s, ignoreCase = true) == true })
                         || spaceKeywords.any { kw -> stock.stockName.contains(kw, ignoreCase = true) }
-                if (!isTechStock && !isSpaceStock) {
-                    Log.w(TAG, "过滤非相关股: ${stock.stockCode} ${stock.stockName}")
+
+                    val keepReason = when {
+                        isTechStock -> "kept:tech"
+                        isSpaceStock -> "kept:space"
+                        else -> "filtered:not-tech-or-space"
+                    }
+
+                    if (keepReason.startsWith("kept")) {
+                        stockDiagnostics.add(stock to keepReason)
+                        Log.d(TAG, "保留股票: ${stock.stockCode} ${stock.stockName} -> $keepReason")
+                    } else {
+                        stockDiagnostics.add(stock to keepReason)
+                        Log.w(TAG, "过滤非相关股: ${stock.stockCode} ${stock.stockName} -> $keepReason")
+                    }
+
+                    isTechStock || isSpaceStock
                 }
-                isTechStock || isSpaceStock
             }
         }
-        
+
         val removedSectorsCount = analysis.affectedSectors.size - filteredSectors.size
         val removedStocksCount = analysis.recommendedStocks.size - filteredStocks.size
 
         if (removedSectorsCount > 0 || removedStocksCount > 0) {
             Log.w(TAG, "AI分析结果过滤统计: 板块=${removedSectorsCount}个, 股票=${removedStocksCount}个")
+        }
+
+        // 输出每支股票的诊断理由，便于调试
+        if (stockDiagnostics.isNotEmpty()) {
+            Log.d(TAG, "股票过滤诊断：")
+            stockDiagnostics.forEach { (stock, reason) ->
+                Log.d(TAG, "diag:${stock.stockCode} | ${stock.stockName} | sector=${stock.sectorName} | reason=$reason")
+            }
+
+            // 同时把逐股诊断追加写入到项目目录下的诊断文件，方便CI/本地分析
+            try {
+                // 写入到单独文件，避免被测试覆盖（测试会写入 app/diagnostic-output.txt）
+                val outPath = System.getProperty("user.dir") + java.io.File.separator + "app" + java.io.File.separator + "diagnostic-output-emergencyfilter.txt"
+                val outFile = java.io.File(outPath)
+                if (!outFile.exists()) outFile.createNewFile()
+
+                // 写入头部统计（覆盖同名条目为追加，保留历史）
+                val header = StringBuilder()
+                header.append("RAW_LENGTH=${newsContent.length}\n")
+                header.append("ORIG_STOCKS=${analysis.recommendedStocks.size}\n")
+                // 过滤后股票数量和最终板块数会在写入时反映
+                header.append("FILTERED_STOCKS=${filteredStocks.size}\n")
+                // 补偿后的板块数量（记录当前已过滤保留的板块观察值）
+                // 使用 filteredSectors.size 代替尚未计算的 compensatedSectors
+                header.append("FINAL_SECTORS=${filteredSectors.size}\n\n")
+                outFile.appendText(header.toString())
+
+                stockDiagnostics.forEach { (stock, reason) ->
+                    val line = "diag:${stock.stockCode} | ${stock.stockName} | sector=${stock.sectorName} | reason=$reason\n"
+                    outFile.appendText(line)
+                }
+                outFile.appendText("\n")
+            } catch (e: Exception) {
+                Log.e(TAG, "写诊断文件失败: ${e.message}")
+            }
         }
 
         // 补偿逻辑：如果过滤后没有任何板块但仍有推荐股票，则尝试从股票的sectorName推导出板块
@@ -125,7 +186,7 @@ object EmergencyFilter {
                     }
                 }
 
-                val sectorCode = derivedName.lowercase().replace(" ", "_")
+                val sectorCode = derivedName.lowercase(Locale.getDefault()).replace(" ", "_")
                 val relatedStockCodes = stocks.map { it.stockCode }
 
                 compensatedSectors.add(
@@ -142,11 +203,11 @@ object EmergencyFilter {
             Log.d(TAG, "已从 ${filteredStocks.size} 支股票推导出 ${compensatedSectors.size} 个板块")
         } else if (compensatedSectors.isNotEmpty() && filteredStocks.isNotEmpty()) {
             // 将保留的股票关联回现有板块（如果它们的 sectorName 与现有板块匹配）
-            val sectorMap = compensatedSectors.associateBy { it.sectorName.lowercase() }.toMutableMap()
+            val sectorMap = compensatedSectors.associateBy { it.sectorName.lowercase(Locale.getDefault()) }.toMutableMap()
             filteredStocks.forEach { stock ->
                 val sname = stock.sectorName?.trim()
                 if (!sname.isNullOrBlank()) {
-                    val key = sname.lowercase()
+                    val key = sname.lowercase(Locale.getDefault())
                     val existing = sectorMap[key]
                     if (existing != null && !existing.relatedStocks.contains(stock.stockCode)) {
                         val updated = existing.copy(relatedStocks = existing.relatedStocks + stock.stockCode)
@@ -180,7 +241,7 @@ object EmergencyFilter {
                     // 2) 次优：优先使用航天相关候选（如果存在）
                     if (current.size < minPerSector) {
                         val spaceCandidates = filteredStocks.filter { rs ->
-                            (!rs.sectorName.isNullOrBlank() && spaceSectors.any { s -> rs.sectorName.contains(s, ignoreCase = true) })
+                            (!rs.sectorName.isNullOrBlank() && spaceSectors.any { s -> rs.sectorName?.contains(s, ignoreCase = true) == true })
                                     || spaceKeywords.any { kw -> rs.stockName.contains(kw, ignoreCase = true) }
                         }.map { it.stockCode }
                         for (code in spaceCandidates) {

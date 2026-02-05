@@ -1,0 +1,6 @@
+kotlin version: 2.0.21
+error message: The daemon has terminated unexpectedly on startup attempt #1 with error code: 0. The daemon process output:
+    1. NOTE: Picked up JDK_JAVA_OPTIONS: -Dorg.sqlite.tmpdir=C:\Users\HUAWEI\AppData\Local\Temp -Djava.io.tmpdir=C:\Users\HUAWEI\AppData\Local\Temp
+    2. Picked up JAVA_TOOL_OPTIONS: -Dorg.sqlite.tmpdir=C:\Users\HUAWEI\AppData\Local\Temp -Djava.io.tmpdir=C:\Users\HUAWEI\AppData\Local\Temp
+    3. Kotlin compile daemon is ready
+

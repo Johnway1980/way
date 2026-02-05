@@ -3,14 +3,11 @@ System.setProperty("room.disableVerification", "true")
 
 pluginManagement {
     repositories {
-        google {
-            content {
-        gradlePluginPortal()
-                includeGroupByRegex("com\\.android.*")
-                includeGroupByRegex("com\\.google.*")
-                includeGroupByRegex("androidx.*")
-            }
+        // Try Google's Maven first so AGP can be resolved for plugin IDs
+        maven {
+            url = uri("https://dl.google.com/dl/android/maven2/")
         }
+        google()
         mavenCentral()
         gradlePluginPortal()
     }

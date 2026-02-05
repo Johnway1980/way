@@ -67,6 +67,12 @@ java {
     }
 }
 
+// Ensure KSP / annotation-processor generated sources are available before running JVM tests
+// This helps avoid implicit task dependency warnings for Hilt/KSP and makes unit tests deterministic.
+tasks.withType<Test>().configureEach {
+    dependsOn(tasks.matching { it.name.startsWith("ksp") })
+}
+
 // KSP options (Room schemas)
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")

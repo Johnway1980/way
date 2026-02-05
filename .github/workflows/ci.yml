@@ -22,6 +22,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Prepare gradle.properties for runner
+        run: |
+          # Use a CI-specific gradle.properties (do not overwrite local developer settings)
+          if [ -f .github/gradle/gradle.properties.ci ]; then
+            echo "Copying CI gradle.properties to project root"
+            cp .github/gradle/gradle.properties.ci gradle.properties
+          else
+            # Fallback: try to sanitize existing gradle.properties
+            if [ -f gradle.properties ]; then
+              if grep -q "^org.gradle.java.home" gradle.properties; then
+                echo "Commenting org.gradle.java.home in gradle.properties for CI runner"
+                sed -i.bak 's/^org.gradle.java.home=.*$/#&/' gradle.properties || true
+              fi
+              # Replace the entire org.gradle.jvmargs with a CI-safe default
+              sed -i.bak "s#^org.gradle.jvmargs=.*#org.gradle.jvmargs=-Xmx2048m -Xms512m -Dfile.encoding=UTF-8#" gradle.properties || true
+            fi
+          fi
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -34,14 +52,32 @@ jobs:
 
       - name: Ensure Gradle wrapper and run tests
         run: |
-          set -e
-          # If wrapper exists, use it; otherwise install gradle, generate wrapper, then use it.
+          set -euo pipefail
+          # Diagnostics: print which gradle and wrapper version to ensure we use the project wrapper
+          echo "---- Diagnostics: gradle locations ----"
+          which gradle || true
+          echo "-- wrapper executable exists?"; [ -f ./gradlew ] && echo yes || echo no
+          echo "---- Wrapper version (if present) ----"
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew || true
+            ./gradlew --version || true
+          fi
+
+          # Clear common Java option env vars that may inject unwanted JVM properties
+          unset JAVA_TOOL_OPTIONS || true
+          unset _JAVA_OPTIONS || true
+
+          # Print effective Java properties for troubleshooting
+          echo "---- Java properties (java -XshowSettings:properties -version) ----"
+          java -XshowSettings:properties -version 2>&1 | sed -n '1,120p' || true
+
+          # Ensure temporary dir properties are CI-safe and run tests via wrapper explicitly
           if [ -x ./gradlew ]; then
-            ./gradlew :app:test --no-daemon --stacktrace || ./gradlew test --no-daemon --stacktrace
+            ./gradlew -Djava.io.tmpdir=/tmp -Dorg.sqlite.tmpdir=/tmp :app:test --no-daemon --stacktrace
           else
             sudo apt-get update -y
             sudo apt-get install -y gradle unzip
             gradle wrapper --gradle-version 8.4
             chmod +x ./gradlew
-            ./gradlew :app:test --no-daemon --stacktrace || ./gradlew test --no-daemon --stacktrace
+            ./gradlew -Djava.io.tmpdir=/tmp -Dorg.sqlite.tmpdir=/tmp :app:test --no-daemon --stacktrace
           fi

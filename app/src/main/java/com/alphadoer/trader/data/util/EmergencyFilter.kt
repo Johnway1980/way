@@ -83,7 +83,7 @@ object EmergencyFilter {
         
         // 过滤股票
         val stockDiagnostics = mutableListOf<Pair<RecommendedStock, String>>()
-        val filteredStocks = if (!strictFiltering) {
+        var filteredStocks = if (!strictFiltering) {
             // 非严格模式：保留所有推荐（仅用于诊断/回归验证）
             analysis.recommendedStocks
         } else {
@@ -117,6 +117,28 @@ object EmergencyFilter {
 
                     isTechStock || isSpaceStock
                 }
+            }
+        }
+
+        // 回退策略：如果过滤后没有任何股票，但原始分析包含推荐，则宽松恢复部分候选以避免完全空结果
+        if (filteredStocks.isEmpty() && analysis.recommendedStocks.isNotEmpty()) {
+            Log.w(TAG, "过滤后无推荐，尝试宽松恢复原始推荐以避免空结果")
+            val recovered = analysis.recommendedStocks.filter { stock ->
+                // 仅移除黑名单，保留其余以便后续补偿
+                !unrelatedStocks.contains(stock.stockCode)
+            }
+            if (recovered.isNotEmpty()) {
+                filteredStocks = recovered
+                Log.d(TAG, "宽松恢复 ${recovered.size} 支股票作为后续补偿候选")
+                // 记录诊断
+                try {
+                    val outPath = System.getProperty("user.dir") + java.io.File.separator + "app" + java.io.File.separator + "diagnostic-output-emergencyfilter.txt"
+                    val outFile = java.io.File(outPath)
+                    if (!outFile.exists()) outFile.createNewFile()
+                    outFile.appendText("FALLBACK_RECOVERED=${recovered.size}\n")
+                    recovered.forEach { r -> outFile.appendText("recovered:${r.stockCode} | ${r.stockName} | sector=${r.sectorName}\n") }
+                    outFile.appendText("\n")
+                } catch (_: Exception) { }
             }
         }
 

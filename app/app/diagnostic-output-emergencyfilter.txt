@@ -57,3 +57,19 @@ FINAL_SECTORS=1
 diag:000001 | 平安银行 | sector=金融 | reason=blacklisted
 diag:300750 | 宁德时代 | sector=科技 | reason=kept:tech
 
+RAW_LENGTH=7
+ORIG_STOCKS=2
+FILTERED_STOCKS=1
+FINAL_SECTORS=1
+
+diag:000001 | 平安银行 | sector=金融 | reason=blacklisted
+diag:300750 | 宁德时代 | sector=科技 | reason=kept:tech
+
+RAW_LENGTH=7
+ORIG_STOCKS=2
+FILTERED_STOCKS=1
+FINAL_SECTORS=1
+
+diag:000001 | 平安银行 | sector=金融 | reason=blacklisted
+diag:300750 | 宁德时代 | sector=科技 | reason=kept:tech
+

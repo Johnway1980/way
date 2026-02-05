@@ -19,3 +19,10 @@ local.properties
 *.keystore
 app/keystore/
 *.key
+
+# Diagnostics and generated test artifacts
+/app/diagnostics/
+/diagnostics/
+diag-*.log
+test-*-diagnostics.log
+app/app/diagnostic-*.txt

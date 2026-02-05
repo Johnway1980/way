@@ -1,0 +1,6 @@
+RAW_LENGTH=1113
+ORIG_STOCKS=0
+FILTERED_STOCKS=0
+FINAL_SECTORS=0
+
+# per-stock diagnostics:

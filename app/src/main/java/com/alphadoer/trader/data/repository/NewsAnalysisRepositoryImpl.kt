@@ -139,7 +139,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                 } catch (e: Exception) {
                     DiagnosticsLogger.logNetworkError(e, newsContent)
                     // 网络错误时fallback到Mock数据，避免闪退
-                    Log.e("NewsAnalysisRepository", "API调用失败，使用Mock数据: ${e.message}", e)
+                    Log.e("NewsAnalysisRepository", "API调用失败，使用Mock数据: ${e.message}")
+                    e.printStackTrace()
                     val mockAnalysis = MockDataGenerator.generateMockAnalysis(newsContent, options)
                     val filteredMockAnalysis = if (newsContent.contains("人工智能", ignoreCase = true) || 
                         newsContent.contains("AI", ignoreCase = true) ||
@@ -189,7 +190,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                     }
                     parseQianfanResponse(responseContent, newsContent, options)
                 } catch (e: Exception) {
-                    Log.e("NewsAnalysisRepository", "解析API响应失败: ${e.message}，使用Mock数据作为fallback", e)
+                    Log.e("NewsAnalysisRepository", "解析API响应失败: ${e.message}，使用Mock数据作为fallback")
+                    e.printStackTrace()
                     val mockAnalysis = MockDataGenerator.generateMockAnalysis(newsContent, options)
                     val filteredMockAnalysis = if (newsContent.contains("人工智能", ignoreCase = true) || 
                         newsContent.contains("AI", ignoreCase = true) ||
@@ -218,7 +220,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                     Log.d("NewsAnalysisRepository", "开始验证和增强分析结果")
                     stockRecommendationValidator.validateAndEnhance(filteredResult, newsContent)
                 } catch (e: Exception) {
-                    Log.e("NewsAnalysisRepository", "验证和增强失败: ${e.message}，使用原始结果", e)
+                    Log.e("NewsAnalysisRepository", "验证和增强失败: ${e.message}，使用原始结果")
+                    e.printStackTrace()
                     filteredResult // 验证失败时使用原始结果
                 }
                 
@@ -241,7 +244,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                 Log.d("NewsAnalysisRepository", "开始验证和增强分析结果（Mock数据）")
                 stockRecommendationValidator.validateAndEnhance(filteredAnalysis, newsContent)
             } catch (e: Exception) {
-                Log.e("NewsAnalysisRepository", "验证和增强失败: ${e.message}，使用原始结果", e)
+                Log.e("NewsAnalysisRepository", "验证和增强失败: ${e.message}，使用原始结果")
+                e.printStackTrace()
                 filteredAnalysis // 验证失败时使用原始结果
             }
             
@@ -270,7 +274,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             val enhancedMockAnalysis = try {
                 stockRecommendationValidator.validateAndEnhance(filteredMockAnalysis, newsContent)
             } catch (e2: Exception) {
-                Log.e("NewsAnalysisRepository", "验证和增强失败: ${e2.message}，使用原始结果", e2)
+                Log.e("NewsAnalysisRepository", "验证和增强失败: ${e2.message}，使用原始结果")
+                e2.printStackTrace()
                 filteredMockAnalysis
             }
             DiagnosticsLogger.logAnalysisResult(enhancedMockAnalysis)
@@ -293,7 +298,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             val enhancedMockAnalysis = try {
                 stockRecommendationValidator.validateAndEnhance(filteredMockAnalysis, newsContent)
             } catch (e2: Exception) {
-                Log.e("NewsAnalysisRepository", "验证和增强失败: ${e2.message}，使用原始结果", e2)
+                Log.e("NewsAnalysisRepository", "验证和增强失败: ${e2.message}，使用原始结果")
+                e2.printStackTrace()
                 filteredMockAnalysis
             }
             DiagnosticsLogger.logAnalysisResult(enhancedMockAnalysis)
@@ -301,7 +307,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             Result.success(enhancedMockAnalysis)
         } catch (e: Exception) {
             // 任何其他异常都使用Mock数据作为fallback，避免闪退
-            Log.e("NewsAnalysisRepository", "发生异常，使用Mock数据作为fallback: ${e.message}", e)
+            Log.e("NewsAnalysisRepository", "发生异常，使用Mock数据作为fallback: ${e.message}")
+            e.printStackTrace()
             DiagnosticsLogger.logNetworkError(e, newsContent)
             DiagnosticsLogger.logMockDataGeneration(newsContent)
             val mockAnalysis = MockDataGenerator.generateMockAnalysis(newsContent, options)
@@ -316,7 +323,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             val enhancedMockAnalysis = try {
                 stockRecommendationValidator.validateAndEnhance(filteredMockAnalysis, newsContent)
             } catch (e2: Exception) {
-                Log.e("NewsAnalysisRepository", "验证和增强失败: ${e2.message}，使用原始结果", e2)
+                Log.e("NewsAnalysisRepository", "验证和增强失败: ${e2.message}，使用原始结果")
+                e2.printStackTrace()
                 filteredMockAnalysis
             }
             DiagnosticsLogger.logAnalysisResult(enhancedMockAnalysis)
@@ -339,7 +347,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             val cached = try {
                 aiAnalysisCacheDao.getCachesByType("NEWS")
             } catch (e: Exception) {
-                Log.e("NewsAnalysisRepository", "数据库查询失败: ${e.message}", e)
+                Log.e("NewsAnalysisRepository", "数据库查询失败: ${e.message}")
+                e.printStackTrace()
                 emptyList()
             }
             
@@ -347,13 +356,15 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                 try {
                     entity.toDomainModel()
                 } catch (e: Exception) {
-                    Log.e("NewsAnalysisRepository", "转换分析结果失败: ${e.message}", e)
+                    Log.e("NewsAnalysisRepository", "转换分析结果失败: ${e.message}")
+                    e.printStackTrace()
                     null
                 }
             }
             emit(analyses)
         } catch (e: Exception) {
-            Log.e("NewsAnalysisRepository", "获取分析历史失败: ${e.message}", e)
+            Log.e("NewsAnalysisRepository", "获取分析历史失败: ${e.message}")
+            e.printStackTrace()
             emit(emptyList()) // 发生错误时返回空列表，避免崩溃
         }
     }
@@ -363,12 +374,14 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             val cached = try {
                 aiAnalysisCacheDao.getCacheByKey(id)
             } catch (e: Exception) {
-                Log.e("NewsAnalysisRepository", "数据库查询失败: ${e.message}", e)
+                Log.e("NewsAnalysisRepository", "数据库查询失败: ${e.message}")
+                e.printStackTrace()
                 null
             }
             cached?.toDomainModel()
         } catch (e: Exception) {
-            Log.e("NewsAnalysisRepository", "获取分析结果失败: ${e.message}", e)
+            Log.e("NewsAnalysisRepository", "获取分析结果失败: ${e.message}")
+            e.printStackTrace()
             null
         }
     }
@@ -548,9 +561,26 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             }
 
             if (json == null) {
-                val objMatch = Regex("\\{(?:[^{}]|(?R))*\\}", RegexOption.DOT_MATCHES_ALL).find(cleaned)
-                if (objMatch != null) {
-                    val candidate = unwrapPossibleStringWrappedJson(objMatch.value)
+                // Java regex doesn't support recursive (?R). Fall back to a manual balanced-brace extractor.
+                fun findFirstBalancedObject(s: String): String? {
+                    val startIdx = s.indexOf('{')
+                    if (startIdx < 0) return null
+                    var depth = 0
+                    for (i in startIdx until s.length) {
+                        when (s[i]) {
+                            '{' -> depth++
+                            '}' -> {
+                                depth--
+                                if (depth == 0) return s.substring(startIdx, i + 1)
+                            }
+                        }
+                    }
+                    return null
+                }
+
+                val objCandidate = findFirstBalancedObject(cleaned)
+                if (objCandidate != null) {
+                    val candidate = unwrapPossibleStringWrappedJson(objCandidate)
                     json = tryParseToMap(candidate)
                     if (json != null) {
                         Log.d("NewsAnalysisRepository", "从原始响应中匹配到对象并解析成功")
@@ -559,8 +589,70 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
             }
 
             if (json == null) {
+                // 无法解析 JSON，尝试从纯文本中降级恢复板块与推荐
+                Log.w("NewsAnalysisRepository", "无法解析AI响应为JSON，尝试从文本降级恢复")
+
+                fun detectSectors(text: String): List<AffectedSector> {
+                    val det = mutableListOf<AffectedSector>()
+                    val lower = text.lowercase()
+                    if (listOf("人工智能", "ai", "大模型", "神经网络", "机器学习").any { lower.contains(it) }) {
+                        det.add(AffectedSector("keji", "科技", AffectedSector.ImpactLevel.MEDIUM, "(inferred)", emptyList()))
+                    }
+                    if (listOf("卫星", "星链", "星舰", "发射", "航天", "iris2", "starship", "starlink").any { lower.contains(it) }) {
+                        det.add(AffectedSector("hangtian", "航天科技", AffectedSector.ImpactLevel.MEDIUM, "(inferred)", emptyList()))
+                    }
+                    return det
+                }
+
+                fun synthesizeRecommendationsFor(sectors: List<AffectedSector>): List<RecommendedStock> {
+                    val pool = listOf(
+                        Pair("300750", "宁德时代"),
+                        Pair("300014", "赛为智能"),
+                        Pair("000063", "中兴通讯"),
+                        Pair("688981", "中微公司"),
+                        Pair("600703", "三安光电"),
+                        Pair("002304", "洋河股份"),
+                        Pair("002415", "海康威视"),
+                        Pair("600584", "长电科技"),
+                        Pair("002230", "科大讯飞"),
+                        Pair("000977", "浪潮信息")
+                    ).toMutableList()
+
+                    val out = mutableListOf<RecommendedStock>()
+                    val minPerSector = 3
+                    for (s in sectors) {
+                        var added = 0
+                        while (added < minPerSector && pool.isNotEmpty()) {
+                            val (code, name) = pool.removeAt(0)
+                            out.add(
+                                RecommendedStock(
+                                    stockCode = code,
+                                    stockName = name,
+                                    market = "SH",
+                                    recommendation = RecommendedStock.RecommendationType.WATCH,
+                                    reason = "synthesized",
+                                    confidence = 0.5,
+                                    targetPrice = null,
+                                    riskLevel = RecommendedStock.RiskLevel.MEDIUM,
+                                    sectorName = s.sectorName
+                                )
+                            )
+                            added++
+                        }
+                    }
+                    return out
+                }
+
+                val inferred = detectSectors(newsContent)
+                val synthesizedStocks = if (inferred.isNotEmpty()) synthesizeRecommendationsFor(inferred) else emptyList()
+
+                // 把合成的股票关联回对应板块的 relatedStocks
+                val finalInferred = inferred.map { s ->
+                    val codes = synthesizedStocks.filter { it.sectorName.equals(s.sectorName, ignoreCase = true) }.map { it.stockCode }
+                    s.copy(relatedStocks = codes)
+                }
+
                 val excerpt = jsonString.take(1000)
-                Log.e("NewsAnalysisRepository", "无法解析AI响应为JSON，返回降级结果")
                 return NewsAnalysis(
                     id = id,
                     newsContent = newsContent,
@@ -568,17 +660,18 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                     sentiment = NewsAnalysis.Sentiment.NEUTRAL,
                     confidence = 0.5,
                     keyPoints = emptyList(),
-                    affectedSectors = emptyList(),
-                    recommendedStocks = emptyList(),
+                    affectedSectors = finalInferred,
+                    recommendedStocks = synthesizedStocks,
                     riskWarnings = emptyList(),
                     recommendations = emptyList(),
                     analysisType = options.analysisType,
                     createdAt = System.currentTimeMillis(),
                     metadata = mapOf(
                         "source" to "qianfan_api",
-                        "status" to "PARSE_ERROR",
+                        "status" to "PARSE_ERROR_INFERRED",
                         "parse_error" to "cannot_parse_json",
-                        "original_response_excerpt" to excerpt
+                        "original_response_excerpt" to excerpt,
+                        "inferred_from_text" to (if (inferred.isNotEmpty()) inferred.joinToString("|") { it.sectorName } else "none")
                     )
                 )
             }
@@ -779,6 +872,137 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                 Log.w("NewsAnalysisRepository", "解析后关键字段空：affectedSectors & recommendedStocks 都为空")
             }
 
+            // 降级恢复：如果没有解析到板块或推荐股票，尝试从新闻文本中推断板块并补足推荐
+            fun detectSectorsFromText(text: String): List<AffectedSector> {
+                val detected = mutableListOf<AffectedSector>()
+                val lower = text.lowercase()
+                if (listOf("人工智能", "ai", "大模型", "神经网络", "机器学习").any { lower.contains(it) }) {
+                    detected.add(
+                        AffectedSector(
+                            sectorCode = "keji",
+                            sectorName = "科技",
+                            impactLevel = AffectedSector.ImpactLevel.MEDIUM,
+                            impactDescription = "(inferred from text)",
+                            relatedStocks = emptyList()
+                        )
+                    )
+                }
+                if (listOf("卫星", "星链", "星舰", "发射", "航天", "iris2", "starship", "starlink").any { lower.contains(it) }) {
+                    detected.add(
+                        AffectedSector(
+                            sectorCode = "hangtian",
+                            sectorName = "航天科技",
+                            impactLevel = AffectedSector.ImpactLevel.MEDIUM,
+                            impactDescription = "(inferred from text)",
+                            relatedStocks = emptyList()
+                        )
+                    )
+                }
+                return detected
+            }
+
+            // 如果没有解析到板块，则从文本中检测并添加
+            if (affectedSectors.isEmpty()) {
+                val inferred = detectSectorsFromText(newsContent)
+                if (inferred.isNotEmpty()) {
+                    affectedSectors.addAll(inferred)
+                    metadata["affectedSectors_status"] = "INFERRED_FROM_TEXT"
+                    metadata["affectedSectors_inferred"] = inferred.joinToString("|") { it.sectorName }
+                }
+            }
+
+            // 确保每个板块至少有 minPerSector 条推荐（优先使用已解析出的推荐）
+            val minPerSector = 3
+            if (affectedSectors.isNotEmpty()) {
+                // 按板块名分组现有推荐
+                val stocksBySector = recommendedStocks.groupBy { it.sectorName?.trim()?.ifEmpty { null } }
+
+                // 加载可配置的候选池（优先从 classpath resources/synth_candidate_pool.csv）
+                fun loadSynthCandidatePool(): MutableList<Pair<String, String>> {
+                    try {
+                        val stream = javaClass.classLoader.getResourceAsStream("synth_candidate_pool.csv")
+                        if (stream != null) {
+                            val list = mutableListOf<Pair<String, String>>()
+                            stream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                                lines.map { it.trim() }
+                                    .filter { it.isNotEmpty() && !it.startsWith("#") }
+                                    .forEach { line ->
+                                        val parts = line.split(',')
+                                        if (parts.size >= 2) {
+                                            val code = parts[0].trim()
+                                            val name = parts.subList(1, parts.size).joinToString(",") { it.trim() }
+                                            if (code.isNotEmpty() && name.isNotEmpty()) {
+                                                list.add(Pair(code, name))
+                                            }
+                                        }
+                                    }
+                            }
+                            if (list.isNotEmpty()) return list
+                        }
+                    } catch (_: Exception) { }
+
+                    // 回退内置列表
+                    return mutableListOf(
+                        Pair("300750", "宁德时代"),
+                        Pair("300014", "赛为智能"),
+                        Pair("000063", "中兴通讯"),
+                        Pair("688981", "中微公司"),
+                        Pair("600703", "三安光电"),
+                        Pair("002304", "洋河股份"),
+                        Pair("002415", "海康威视"),
+                        Pair("600584", "长电科技"),
+                        Pair("002230", "科大讯飞"),
+                        Pair("000977", "浪潮信息")
+                    )
+                }
+
+                val candidatePool = loadSynthCandidatePool()
+                val availableIter = candidatePool.iterator()
+
+                for (i in affectedSectors.indices) {
+                    val sector = affectedSectors[i]
+                    val sectorName = sector.sectorName
+                    val present = recommendedStocks.filter { r ->
+                        !r.sectorName.isNullOrBlank() && r.sectorName.equals(sectorName, ignoreCase = true)
+                    }.toMutableList()
+
+                    // 如果已有推荐不足，尝试从其它已解析推荐补充
+                    if (present.size < minPerSector) {
+                        // 1) 从同一板块的解析结果中补齐
+                        val sameSectorCandidates = stocksBySector[sectorName]?.map { it.stockCode } ?: emptyList()
+                        for (code in sameSectorCandidates) {
+                            if (present.size >= minPerSector) break
+                            if (recommendedStocks.any { it.stockCode == code } && present.none { it.stockCode == code }) {
+                                recommendedStocks.find { it.stockCode == code }?.let { present.add(it) }
+                            }
+                        }
+
+                        // 2) 从候选池中补齐（避免重复）
+                        while (present.size < minPerSector && availableIter.hasNext()) {
+                            val (code, name) = availableIter.next()
+                            if (recommendedStocks.any { it.stockCode == code }) continue
+                            val synth = RecommendedStock(
+                                stockCode = code,
+                                stockName = name,
+                                market = "SH",
+                                recommendation = RecommendedStock.RecommendationType.WATCH,
+                                reason = "synthesized for coverage",
+                                confidence = 0.5,
+                                targetPrice = null,
+                                riskLevel = RecommendedStock.RiskLevel.MEDIUM,
+                                sectorName = sectorName
+                            )
+                            recommendedStocks.add(synth)
+                            present.add(synth)
+                        }
+                    }
+
+                    // 更新板块的 relatedStocks 引用
+                    val relatedCodes = present.map { it.stockCode }
+                    affectedSectors[i] = sector.copy(relatedStocks = relatedCodes)
+                }
+            }
+
             return NewsAnalysis(
                 id = id,
                 newsContent = newsContent,
@@ -799,7 +1023,8 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                 metadata = metadata
             )
         } catch (e: Exception) {
-            Log.e("NewsAnalysisRepository", "parseQianfanResponse 未捕获异常: ${e.message}", e)
+            Log.e("NewsAnalysisRepository", "parseQianfanResponse 未捕获异常: ${e.message}")
+            e.printStackTrace()
             return NewsAnalysis(
                 id = id,
                 newsContent = newsContent,

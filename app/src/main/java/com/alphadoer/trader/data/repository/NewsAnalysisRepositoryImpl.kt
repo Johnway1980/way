@@ -919,6 +919,39 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
 
                 // 加载可配置的候选池（优先从 classpath resources/synth_candidate_pool.csv）
                 fun loadSynthCandidatePool(): MutableList<Pair<String, String>> {
+                    // 1) 尝试从环境变量或系统属性指定的远程 URL 加载
+                    try {
+                        val remoteUrl = System.getenv("SYNTH_CANDIDATE_POOL_URL")
+                            ?: System.getProperty("synth.candidate.pool.url")
+                        if (!remoteUrl.isNullOrBlank()) {
+                            try {
+                                val url = java.net.URL(remoteUrl)
+                                val conn = url.openConnection()
+                                conn.connectTimeout = 3000
+                                conn.readTimeout = 5000
+                                conn.getInputStream().bufferedReader(Charsets.UTF_8).useLines { lines ->
+                                    val list = mutableListOf<Pair<String, String>>()
+                                    lines.map { it.trim() }
+                                        .filter { it.isNotEmpty() && !it.startsWith("#") }
+                                        .forEach { line ->
+                                            val parts = line.split(',')
+                                            if (parts.size >= 2) {
+                                                val code = parts[0].trim()
+                                                val name = parts.subList(1, parts.size).joinToString(",") { it.trim() }
+                                                if (code.isNotEmpty() && name.isNotEmpty()) {
+                                                    list.add(Pair(code, name))
+                                                }
+                                            }
+                                        }
+                                    if (list.isNotEmpty()) return list
+                                }
+                            } catch (_: Exception) {
+                                // 远程加载失败，继续尝试本地资源
+                            }
+                        }
+                    } catch (_: Exception) { }
+
+                    // 2) 尝试从 classpath 资源加载
                     try {
                         val stream = javaClass.classLoader.getResourceAsStream("synth_candidate_pool.csv")
                         if (stream != null) {
@@ -941,7 +974,7 @@ class NewsAnalysisRepositoryImpl @Inject constructor(
                         }
                     } catch (_: Exception) { }
 
-                    // 回退内置列表
+                    // 3) 回退内置列表
                     return mutableListOf(
                         Pair("300750", "宁德时代"),
                         Pair("300014", "赛为智能"),
